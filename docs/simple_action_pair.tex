@@ -1,0 +1,403 @@
+\documentclass[11pt]{article}
+\input{MarcusStyle.sty}  
+% NB: I keep MarcusStyle.sty in $HOME/texmf/tex/latex, because 
+% kpsewhich -var-value=TEXMFHOME says $HOME/texmf is where latex looks.
+
+\title{optimal sensor control}
+\author{marcus}
+\begin{document}
+\maketitle
+
+\begin{abstract}
+The goal here is to build the simplest possible world in which sensory
+actions ``matter'', and to then directly write down what the optimal
+sensor-action decision should be. 
+
+This turns out to be perfectly doable, and exposes the core of the problem.
+
+Challenge: relate this optimal solution to what we're doing. Where and what is
+the ``sensory utility''?
+
+
+Thought: this is absolutely {\it primal fundamental epistemic stuff}
+and yet the computation is, well, strangely opaque.
+
+Beware my rampant abuse of notation: for brevity I will say things
+like $\sum_a P(x \mid a)$ which should perhaps be written with
+lowercase representing variables and uppercase denoting specific
+values, like $\sum_A P(x=X \mid a=A)$. 
+
+\end{abstract}
+
+\tableofcontents
+
+\newpage
+\section{problem description}
+
+
+\subsection{the variables}
+\begin{itemize}
+\item $a$ is the sensory action.
+\item $x$ is the ``true'' state of the world.
+\item $\by(x,a)$ is observable consequences of the state. 
+\item $b$ is a later ``significant'' action, which doesn't affect the sensors.
+\item $\Gamma(b,x)$ is the real-world payoff -- the thing that makes
+  the choice of $b$ significant. The actual task is to maximize
+  $\expectation[\Gamma]$ over many trials. 
+\end{itemize}
+
+
+\subsection{the factorisation (what depends on what)}
+The PGM shown in Figure \ref{fig:PGM} specifies the situation, and factorizatoin.
+
+\begin{figure}[Hh!]
+  \centering
+%  \includegraphics[width=0.7\textwidth]{simple_action_pair_PGM_AFTER}
+  \includegraphics[scale=1.]{simple_action_pair_PGM_AFTER}
+  \caption{\label{fig:PGM} Time proceeds from left to right, in the
+    sense that sensory action $a$ must be decided before $\by$ is
+    observed, and action $b$ is decided after $a$ and $\by$ are
+    known. Shading indicated an observed variable, so this figure
+    represents the situation at the point $b$ is being decided.  }
+\end{figure}
+\Line
+\newpage
+\section{the short story}
+We assume that the agent knows these exactly:
+\begin{itemize}
+\item $P(x)$, the prior over states $x$. 
+\item the payoff $\Gamma(b,x)$ for doing $b$ in state $x$ is known\footnote{Whether learned by RL or sculpted by evolution, the agent knows the game.}.
+\item $P(\by \mid x,a)$
+\end{itemize} 
+{\color{blue}Denote the sufficient statistics of the prior $P(x)$ by
+  $\theta$, and of the posterior $\Bel(x\mid a,\by)$ by $\theta(a,\by)$.}
+
+Rational decisions for $b$: the agent should choose the $b$ that
+maximizes expectation of $\Gamma$ over $x$, which is a deterministic
+function of $\Bel(x)$. 
+The agent's belief state at the moment $b$ gets decided is $\Bel(x \mid
+a,\by)$ and so the choice will be
+\begin{align*}
+b^\star \gets \argmax_{b} \sum_x \, \Gamma_{b,x} \,\; \Bel(x \mid a,\by) %\;\; =\; \boldsymbol\Gamma \cdot \mathbf{\Bel}(a,\by)
+\intertext{in which the belief state we need is (by Bayes theorem and the factorization)}
+\Bel(x \mid a, \by) = \frac{1}{Z_{a}(\by)}\; P(\by \mid a,x)\; P(x)
+\end{align*}
+$Z_{a}(\by) = P(\by \mid a) = \sum_{x^\prime} P(\by \mid x^\prime,a)
+P(x^\prime)$ 
+is just the required normalisation over $x$. This does
+not need to be computed here as it won't affect the choice of $b$ (but
+it does elsewhere, see below).
+
+That is, once you know the game via $\Gamma$, there is an analytic classifier
+$C$ which, when provided with the sufficient statistics of a belief state, returns the optimal action
+$b^\star = C(\,\theta(a,\by)\,)$. Think of this as inducing a
+partition (``classification'') of possible belief states into separate
+regions, one for each action $b$.
+
+At the time $a$ needs to be decided $\by$ is unknown, however.
+Rationality in choice of $a$ entails finding $\argmax_{a}
+\Gamma(a)$.  $\Gamma(a)$ is the expected payoff obtained by the agent
+playing $a$, observing a $\by$, and then playing the best $b$
+based on updated beliefs about $x$. $\Gamma(a)$ is an average over
+$P(x)$, and over the payoffs for the resulting (rational) choices for
+$b$, weighted by their probabilities of being chosen:
+\begin{align*}
+%\Gamma(a) &= \sum_x P(x) \sum_b \; \Gamma_{b,x} \, P(b \mid a,x) 
+%%\intertext{where }
+%& \text{where } P(b \mid a,x) = \int_{\substack{\by \; s.t. \\ C( \theta(\mid a,\by)=b}} P(\by \mid a,x)  \; d\by 
+% \intertext{and where} P(\by \mid a) &= Z_{a}(\by)
+%\end{align*}
+%Solely in terms of what the agent knows then, it needs to calculate this quantity:
+\Gamma(a) &= 
+\sum_x P(x) 
+\sum_b \; \bigg[ \Gamma_{b,x}
+\;
+%\overbrace{
+\int_{\substack{\by \; s.t. \\ C(\theta(a,\by)) =b}} 
+ P(\by \mid x,a)  \;\; d\by 
+%}^\text{$P(b\mid a,x)$, which is a "$b \times a$" matrix} 
+\bigg]
+\end{align*}
+which can be written more simply as:
+\begin{equation}
+\label{eq:nutshell2} 
+\Gamma(a) = 
+\sum_x P(x) 
+\int d\by \;
+\bigg[ P(\by \mid x,a)  \;\;
+\Gamma_{b^\star,x} \bigg] 
+\hfill \text{with} \;\;b^\star = C(\theta(a,\by)) \;\;\;\; \;\;\;\; \;\;\;\;
+\end{equation}
+
+Equation \ref{eq:nutshell2} is optimal sensing in a nutshell then.
+It's a heavy calculation, which is what makes things interesting: so
+where can savings be made, things precomputed, approximations pursued?
+
+\newpage
+\section{Questions}
+
+
+\begin{itemize}
+\item  Do you think my formulation is correct?
+
+\item This made me google the phrase ``Value of information'' as (I've
+  suggested previously) that concept exists (eg. in Russell and
+  Norvig) and might well be relevant. That led me to the wikpedia page
+  on {\tt Expected\_value\_of\_sample\_information}, which certainly
+  looks similar in motivation.  If my formulation is correct {\it is
+    it the same as finding the EVSI of different sensory actions, and
+    choosing the one with max EVSI?}
+
+\item I've tried to discern something that amounts to the \emph{utility of
+  the sensory action}, in terms of the belief state to be
+  obtained. But I can't see it. Does that mean utility of sensory
+action, and therefore the entire ``saliency'' field, has no meaning to
+an optimal system and is therefore just odd hackery?
+
+\end{itemize}
+
+
+
+\Line
+\section{thought: the integral is the hard part}
+\begin{itemize}
+\item For a discrete $\by$ the big computational burden is the integral over
+$y$, but it's trivial to generate a Monte Carlo estimate of this. Make an $x \sim P(x)$ and a $\by \sim P(\by \mid a,x)$, calculate the corresponding $b^\star$, and add $\Gamma_{b^\star,x}$ to a running average. This is $\approx \Gamma(a)$, easy!
+\item What about for Gaussian $y$? Should be possible, even without MC.
+\end{itemize}
+
+\Line
+\section{aside: a hunch about entropy that is sadly bogus}
+
+My hunch was...
+
+So if $a=0$ in chosen, the agent thinks it will choose it later choose $b=0$
+ with probability $P(b=0\mid a=0) = 0.6+0.1=0.7$, and choose $b=1$ with probability 0.3. We can do the same for $a=1$.
+
+ I THOUGHT: agent should choose that action $a$ that has the {\bf
+   highest entropy over $b$}, namely $H(b\mid a) = -\sum_{b=0}^1
+ P(b|a) \log P(b|a)$.
+
+ie. the agent is best off, on average, if it \underline{asks the question whose
+answer will provide the most information}\footnote{reduction of Shannon
+entropy} about which $b$ to choose.
+
+There's absolutely no sign of a logarithm in here though, AND the
+payoffs $\Gamma$ appear not just in the partitioning, but also in the
+computation that follows the partitioning. So I must renounce my
+hunch!
+
+
+%% \newpage
+%% \section{another aside: a simple example in more detail}
+
+%% \subsection{the variables}
+%% \begin{itemize}
+%% \item $a\in \{0,1\}$ binary.
+%% \item $x\in \{0,1\}$ binary. $P(x)$ Bernoulli.
+%% \item I want $\by$ to have several dimensions, in order that we can imagine learning more about one of them than another.  SIMPLEST: $\by = (y_0, y_1)$ with $y_i \in \{0,1\}$. So there are four possible $\by \in \{(0,0),\;,(1,0),\;,(0,1),\;,(1,1) \}$.
+%% \item $b$ binary.
+%% \item  payoff $\Gamma(b,x)$ is just a matrix $\boldsymbol\Gamma$. Here is an example:
+
+%% \begin{tabular}{cccc}
+%% $\boldsymbol\Gamma$: &  %\multicolumn{2}{c}{$x$}\\
+%% $x=0$ & $x=1$ \\
+%% \cline{2-3}
+%% $b=0$ & 
+%% \multicolumn{1}{|p{1cm}}{$-100$} & \multicolumn{1}{|p{1cm}|}{$+3$} \\
+%% \cline{2-3}
+%% $b=1$ &
+%% \multicolumn{1}{|p{1cm}}{$-1$} & \multicolumn{1}{|p{1cm}|}{$-1$} \\
+%% \cline{2-3}
+%% \end{tabular}
+%% \end{itemize}
+
+%% \subsection{the parametric forms}
+
+%% Each dependency in the PGM needs to be spelled out.
+
+%% \subsubsection*{prior on $x$}
+
+%% $x$ is Bernoulli, with sufficient statistics $\theta$ being merely the probability $P(x=1)$.
+%% The probability $x=0$ is just $1-\theta$.
+
+
+%% \subsubsection*{effect of $a$ and $x$ on observables $\by$}
+%% We need to decide on $P(\by \mid a,x)$.
+
+%% It would be good to consider the case of $\by$ being a vector of
+%% reals, with $P(\by \mid a,x)$ being Gaussian. But here I'm talking
+%% about the simplest interesting discrete case instead, which is just
+%% two pixels, each of which is either on or off.
+
+%% For example, think of two pixels (two doors to look behind) indexed 0
+%% (``left'') and 1 (``right''). $x$ being binary can be thought of as
+%% meaning there's something behind {\it one} of the doors. The agent's
+%% problem is going to be that it doesn't know which one.
+
+%% At the end of the day, all $y$ values are going to be samples and
+%% could take either value.  
+
+%% Suppose that $y_0$ and $y_1$ are independent given $a$ and $x$, which seems quite reasonable:
+%% \[
+%% P(\by \mid a,x) = \prod_i P(y_i \mid a,x)
+%% \]
+%% and we might specify the individual $y$ as samples from Bernoulli
+%% distributions with fixed parameters.
+
+%% As a concrete example, suppose that by ``foveating on'' one
+%% pixel\footnote{ie. opening one door, if you prefer that analogy} then
+%% you {\it usually} see the truth about whether $x$ is there, but learn
+%% nothing at all about what's going on at the other site.
+%% I think the following matrix captures this description.
+
+%% \begin{tabular}{|c|c||c|c|}
+%% \cline{1-4} $a$ & $x$ & \multicolumn{2}{c|}{$\by$} \\ \cline{1-4} $0$
+%% & $0$ & $.9$ & $.5$ \\ $0$ & $1$ &
+%% $.1$ & $.5$ \\ $1$ & $0$ & $.5$ & $.1$ \\ 
+%% $1$ & $1$ & $.5$ & $.9$ \\ 
+%% \cline{1-4}
+%% \end{tabular}
+
+
+%% When the moment comes that a $b$ decision needs to be made,
+%% there's no doubt what a rational agent should do. It should choose $b$ so
+%% as to maximize $\expectation [\Gamma]$.
+%% These expected payoffs are:
+%% \begin{align*}
+%% \Gamma(b=0) &= (1-\theta) \Gamma_{0,0} + \theta \Gamma_{0,1} \\
+%% \Gamma(b=1) &= (1-\theta) \Gamma_{1,0} + \theta \Gamma_{1,1} 
+%% \end{align*}
+
+
+%% \subsection{The $b$-choice partitions the space of belief states}
+%% For our simple example, the partition is just a number,
+%% \begin{align*}
+%% \theta^\mathrm{crit} &= \frac{\Gamma_{11} - \Gamma_{01}}{D} & \text{with  }
+%% D = \Gamma_{11} - \Gamma_{01} + \Gamma_{00} - \Gamma_{10}
+%% \end{align*}
+
+%% Suppose that $D<0$, as it is in the example. In that case
+%% \[
+%% \theta > \theta^\mathrm{crit} \;\; \implies \;\;\Gamma^\mathrm{true}(b=1) \;\;>\;\; \Gamma^\mathrm{true}(b=1) 
+%% \]
+%% and thus action $b=0$ is to be preferred.  Conversely, if 
+%% $\theta < \theta^\mathrm{crit}$ action $b=1$ is to be preferred.
+%% If $D>0$, we reverse the 2nd inequality.
+
+%% Thus the payoff matrix causes a partition of ``belief space'' in terms
+%% of preferred action $b$.
+
+
+
+%% \subsection{probabilities that observations $\by$ will be made}
+
+%% Several things could be seen after the sensory action is taken:
+
+%% \begin{tabular}{p{1.5cm}|*{4}{p{1.1cm}|}}
+%% \cline{2-5}
+%% $\by$: & $(0,0)$ & $(0,1)$ & $(1,0)$ & $(1,1)$ \\
+%% \cline{2-5}
+%% \end{tabular}
+
+
+%% From the PGM structure,
+%% \begin{align*}
+%% P(x,\by \mid a) 
+%%  &= P(x) P(\by \mid x,a) \\
+%%  &= P(x) P(y_0 \mid x,a)  P(y_1 \mid x,a) 
+%% \end{align*}
+
+%% For example,\\
+%% \begin{tabular}{p{1.5cm}|*{4}{p{1.1cm}|}}
+%% \cline{2-5}
+%% $P(\by \mid a)$: & $0.2$ & $0.1$ & $0.6$ & $0.1$ \\
+%% \cline{2-5}
+%% \end{tabular}
+
+
+
+%% \subsubsection*{inferences about $x$ that would follow from observations}
+%% Say the agent takes action $a$ and observes vector $\by$.
+
+%% The agent would then make a prediction for $x$, and specifically one for $\theta(a,\by)=\Bel(x=1|a=0,\by)$.  These values can be found:
+%% \begin{align*}
+%% \frac{1-\theta}{\theta} 
+%%  &=\frac{P(x=0 \mid a=0,\by)}{P(x=1 \mid a=0,\by)} \\
+%%  &= \frac{P(\by \mid a=0, x=0)}{P(\by \mid a=0, x=1)} \; \frac{P(x=0)}{P(x=1)} \\
+%%  &= \phi
+%% \end{align*}
+%% Inverting this, we get $\theta(a,\by) = \frac{1}{1+1/\phi}$.
+
+%% The agent can sum up the calculated probability for each of those
+%% $\by$ that lead to $\theta(a,\by)$ being less than $\theta^\mathrm{crit}$.
+%% ie. The agent can predict the probability of action $b=0$ being
+%% chosen, conditioned on its sensory action $a$.
+
+%% For example, we might get\\
+%% \begin{tabular}{p{1.5cm}|*{4}{p{1.1cm}|}}
+%% \cline{2-5}
+%% $\theta(a,\by)$: & $0.9$ & $0.1$ & $0.5$ & $0.7$ \\
+%% \cline{2-5}
+%% \end{tabular}
+
+%% Which would lead to the following $b$ decisions, say:
+
+%% \begin{tabular}{p{1.5cm}|*{4}{p{1.1cm}|}}
+%% \cline{2-5}
+%% $b^\star$: & $1$ & $0$ & $0$ & $1$ \\
+%% \cline{2-5}
+%% \end{tabular}
+
+%% \Line
+
+\section{version for a world where ``if anything changes, hide''}
+
+Slightly more complex PGM:
+
+\begin{figure}[Hh!]
+  \centering
+  \includegraphics[scale=1.]{change_hider_PGM}
+  \caption{\label{fig:change_hider_PGM}}
+\end{figure}
+
+\begin{itemize}
+\item $\bz$ is ground truth about a vector of pixel values.
+
+\item $\by$ is a sample whose elements are Gaussian distributed, with mean given by $\bz$ and variance determined by the $FPP(a)$.
+\[
+P(\by | \bz, a) = \mathcal{N}(\bz, \sigma^2(a))
+\]
+where $\sigma^2(a)$ captures the foveation precision profile: small
+for $y_j$ near $a=i$, larger for further away.
+
+\item Semantics: $b=0$ is ``do business as usual'' but $b=1$ is
+  ``hide''.  $x$ is binary, with $x=0$ meaning there's no threat
+  present, and no need to hide.
+
+\item A payoff matrix that captures the effects of hiding: If you hide needlessly, you merely forego modest payoffs, but if you fail to hide, it's bad news.
+\\
+\begin{tabular}{cccc}
+$\boldsymbol\Gamma$: &  %\multicolumn{2}{c}{$x$}\\
+$x=0$ & $x=1$ \\
+\cline{2-3}
+$b=0$ & 
+\multicolumn{1}{|p{1cm}}{$1$} & \multicolumn{1}{|p{1cm}|}{$-9$} \\
+\cline{2-3}
+$b=1$ &
+\multicolumn{1}{|p{1cm}}{$0$} & \multicolumn{1}{|p{1cm}|}{$0$} \\
+\cline{2-3}
+\end{tabular}
+
+
+
+\item If $x=0$ then $z$ is just a sample from $p(\bz)$. But if $x=1$,
+  then $z$ is altered in some way, t.b.d.
+\[
+
+\]
+
+
+\end{itemize}
+
+\end{document}
